@@ -30,14 +30,17 @@ def main():
     CREDENTIALS_PATH = os.path.join(_ROOT_PROJECT_PATH, "Docs/credentials.cfg")
     config = configparser.ConfigParser()    # Need sensitive information from config file
     config.read(filenames=CREDENTIALS_PATH)
-    USERNAME = config['status_dashboard_archive']["username"]
-    PASSWORD = config['status_dashboard_archive']["password"]
+
     GEODATA_ALIAS = "Geodata Data"
+    GROUPED_TYPES_LIST = ("GeometryServer", "SearchServer", "GlobeServer", "GPServer", "GeocodeServer", "GeoDataServer")
+    PASSWORD = config['status_dashboard_archive']["password"]
     RESULT_FILE = "GeodataServices.json"
     SERVER_PORT_SECURE = config['ags_prod_machine_names']["secureport"]
     SERVER_ROOT_URL = "https://{machine_name}.mdgov.maryland.gov:{port}"
     SERVER_URL_GENERATE_TOKEN = "arcgis/admin/generateToken"
     SERVER_URL_ADMIN_SERVICES = "arcgis/admin/services"
+    USERNAME = config['status_dashboard_archive']["username"]
+
     server_machine_names = {0: config['ags_prod_machine_names']["machine1"],
                             1: config['ags_prod_machine_names']["machine2"],
                             2: config['ags_prod_machine_names']["machine3"],
@@ -45,7 +48,7 @@ def main():
 
     # CLASSES
     class ItemObject:
-        """Items are services within folders."""
+        """Items are services within folders reflected in the reports."""
         GEODATA_ROOT = "https://geodata.md.gov/imap/rest/services"
         REST_URL_BEGINNING = "https://{machine_name}.mdgov.maryland.gov:{port}/arcgis/rest/services"
         REST_URL_END = "{folder}/{service_name}/{type}"
@@ -53,7 +56,7 @@ def main():
         def __init__(self, item, folder, machine_name):
             """
             Instantiate an ItemObject
-            :param item: json object with information about the service item
+            :param item: json object with information about the service item reflected in the reports
             :param folder: the folder in the services directory where the item is located
             :param machine_name: the name of the ags server machine currently being interrogated for information
             """
@@ -292,11 +295,13 @@ def main():
                                       params=request_params_result,
                                       search_key="folders")
 
-    #   Remove certain folders(System and Utilities per Jessie), and append entry for root folder
+    #   Remove certain folders (System and Utilities per Jessie), and append entry for root folder
     remove_folders = ["System", "Utilities"]
     folders = list(set(folders) - set(remove_folders))
     folders.append("")
     folders.sort()
+
+    #   Create a machine object for the selected ArcGIS Server machine.
     machine_object = MachineObjects(machine_name=machine,
                                     root_url=root_server_url,
                                     admin_services_url=admin_services_full_url,
@@ -308,7 +313,7 @@ def main():
     service_results_file_handler = open(os.path.join(_ROOT_PROJECT_PATH, machine_result_file), 'w')
     service_results_file_handler.write("[")
 
-    #   Loop on the found folders and discover the services and write the service information
+    #   Loop on the found folders, discover the services, and write the services information
     folder_iteration_count = 0
     for folder in machine_object.folders_list:
         print(f"\nFOLDER: {folder} - {folder_iteration_count + 1} of {len(machine_object.folders_list)}")
@@ -318,11 +323,14 @@ def main():
         if folder == "" or folder == "/":   # Unclear why Jessie included 'folder == "/"' but am preserving
             continue
         else:
+
             # Build the URL for the current folder
             folder += "/"
             report_url = os.path.join(machine_object.admin_services_url, folder, "report")
             report_request_params = create_params_for_request(token_action=machine_object.token)
             reports = get_value_from_response(url=report_url, params=report_request_params, search_key="reports")
+
+            # Inspect service items reflected in the reports
             line = ""
             item_iteration_count = 0
             for item in reports:
@@ -332,26 +340,23 @@ def main():
                     folder_name = folder
 
                 item_object = ItemObject(item=item, folder=folder_name, machine_name=machine)
-
-                grouped_types_list = ["GeometryServer", "SearchServer", "GlobeServer", "GPServer", "GeocodeServer",
-                                      "GeoDataServer"]
-                if item["type"] in grouped_types_list:
+                if item_object.type in GROUPED_TYPES_LIST:
                     line = item_object.create_json_string(data=item_object.create_base_dictionary())
-                elif item["type"] == "MapServer":
+                elif item_object.type == "MapServer":
 
                     # Check for Map Cache
                     item_object.cached = item["properties"]["isCached"]
 
                     if len(item["extensions"]) > 0:
 
-                        # Extract the KML, WMS, WFS, and FeatureService properties from the response
+                        # Extract the KML, WMS, WFS, and FeatureServer properties from the response
                         kml_properties = extract_item_properties(item_dict=item, name_check="KmlServer")
                         wms_properties = extract_item_properties(item_dict=item, name_check="WMSServer")
                         wfs_properties = extract_item_properties(item_dict=item, name_check="WFSServer")
-                        feature_service_properties = extract_item_properties(item_dict=item, name_check="FeatureServer")
+                        feature_server_properties = extract_item_properties(item_dict=item, name_check="FeatureServer")
 
-                        if len(feature_service_properties) > 0:
-                            item_object.feature_service = str(feature_service_properties[0]["enabled"])
+                        if len(feature_server_properties) > 0:
+                            item_object.feature_service = str(feature_server_properties[0]["enabled"])
 
                         if len(kml_properties) > 0:
                             item_object.kml = str(kml_properties[0]["enabled"])
@@ -362,7 +367,7 @@ def main():
                         if len(wfs_properties) > 0:
                             item_object.wfs = str(wfs_properties[0]["enabled"])
 
-                    # Handle map server layers. Unique to Map Server.
+                    # Handle map server layers. Functionality unique to Map Server.
                     layer_iteration_count = 0
                     layers_string = "["
                     if item_object.real_time_status == "STARTED":
@@ -383,7 +388,6 @@ def main():
                             print('no layers')
                     layers_string += "]"
                     item_object.layers = layers_string
-
                     line = item_object.create_json_string_mapserver(data=item_object.create_base_dictionary())
                 elif item["type"] == "ImageServer":
                     wms_properties = extract_item_properties(item_dict=item, name_check="WMSServer")
@@ -391,14 +395,16 @@ def main():
                         item_object.wms = str(wms_properties[0]["enabled"])
                     line = item_object.create_json_string(data=item_object.create_base_dictionary())
                 else:
+                    # line would still be == "" if this else is accessed
                     pass
 
+                # Insert a comma before all lines except for the first item or for empty items where line is empty.
                 if item_iteration_count == 0 or line == "":
                     pass
                 else:
                     line = f",{line}"
 
-                # Write the results to the file
+                # Write the results to the file, unless the item is empty
                 if line == "":
                     pass
                 else:
@@ -406,12 +412,15 @@ def main():
                     line = ""
                     item_iteration_count += 1
 
-            # Between folders, insert a comma in the json. Skip empty folders, and do not insert after the last folder.
+            # TODO: It is unclear how this is triggered and how it interacts with the functionality within the items loop. Run print tests.
             if folder_iteration_count < (len(folders)) and item_iteration_count > 0:
                 line = f"{line},"
+                print("In the IF statement")        # TESTING
+                print(line)                         # TESTING
             else:
+                print("In the ELSE statement")      # TESTING
                 pass
-            service_results_file_handler.write(line)
+            service_results_file_handler.write(line)    # TODO: Could this be moved into the if statement?
             line = ""
 
     service_results_file_handler.write("]")
