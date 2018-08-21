@@ -2,3 +2,6 @@
 *Docs/
 Docs/credentials.cfg
 *.idea
+.idea/*
+.idea/workspace.xml
+GeodataServices.json
