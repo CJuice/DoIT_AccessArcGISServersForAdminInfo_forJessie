@@ -26,18 +26,22 @@ def main():
     project_root = os.path.dirname(__file__)
 
     # VARIABLES
-    SERVER_PORT_SECURE = 6443
-    SERVER_MACHINE_NAMES = ("gis-ags-imap01p","gis-ags-imap02p","gis-ags-imap03p","gis-ags-imap04p")
+    credentials_path = os.path.join(project_root, r"Docs\credentials.cfg")
+    config = configparser.ConfigParser()
+    config.read(filenames=credentials_path)
+    SERVER_PORT_SECURE = config['ags_prod_machine_names']["secureport"]
+    SERVER_MACHINE_NAMES = (config['ags_prod_machine_names']["machine1"],
+                            config['ags_prod_machine_names']["machine2"],
+                            config['ags_prod_machine_names']["machine3"],
+                            config['ags_prod_machine_names']["machine4"])
     SERVER_ROOT_URL = "https://{machine_name}:{port}"
     SERVER_URL_GENERATE_TOKEN = "arcgis/admin/generateToken"
     SERVER_URL_SERVICES = "arcgis/admin/services"
 
     # Need credentials from config file
-    credentials_path = os.path.join(project_root, r"Docs\credentials.cfg")
-    config = configparser.ConfigParser()
-    config.read(filenames=credentials_path)
-    username = config['DEFAULT']["username"]
-    password = config['DEFAULT']["password"]
+
+    username = config['status_dashboard_archive']["username"]
+    password = config['status_dashboard_archive']["password"]
 
     # CLASSES
     class Machine_Objects():
