@@ -41,7 +41,7 @@ def main():
 
     GEODATA_ALIAS = "Geodata Data"
     GROUPED_TYPES_LIST = ("GeometryServer", "SearchServer", "GlobeServer", "GPServer", "GeocodeServer", "GeoDataServer")
-    PASSWORD = config['status_dashboard_archive']["password"]
+    PASSWORD = config['ags_server_credentials']["password"]
     RESULT_FILE = "GeodataServices.json"
     SERVER_MACHINE_NAMES = {0: config['ags_prod_machine_names']["machine1"],
                             1: config['ags_prod_machine_names']["machine2"],
@@ -51,7 +51,7 @@ def main():
     SERVER_ROOT_URL = "https://{machine_name}.mdgov.maryland.gov:{port}"
     SERVER_URL_ADMIN_SERVICES = "arcgis/admin/services"
     SERVER_URL_GENERATE_TOKEN = "arcgis/admin/generateToken"
-    USERNAME = config['status_dashboard_archive']["username"]
+    USERNAME = config['ags_server_credentials']["username"]
 
     # CLASSES
     class ReportObject:
@@ -158,7 +158,7 @@ def main():
             data["layers"] = self.layers
             return json.dumps(obj=data, indent=indent)
 
-    class MachineObjects:
+    class MachineObject:
         """Created to store machine properties and values."""
         def __init__(self, machine_name, root_url, admin_services_url, token, folders):
             """
@@ -310,7 +310,7 @@ def main():
     folders.sort()
 
     #   Create a machine object for the selected ArcGIS Server machine.
-    machine_object = MachineObjects(machine_name=machine,
+    machine_object = MachineObject(machine_name=machine,
                                     root_url=root_server_url,
                                     admin_services_url=admin_services_full_url,
                                     token=token,

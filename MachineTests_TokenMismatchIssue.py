@@ -40,8 +40,8 @@ def main():
 
     # Need credentials from config file
 
-    username = config['status_dashboard_archive']["username"]
-    password = config['status_dashboard_archive']["password"]
+    username = config['ags_server_credentials']["username"]
+    password = config['ags_server_credentials']["password"]
 
     # CLASSES
     class Machine_Objects():
