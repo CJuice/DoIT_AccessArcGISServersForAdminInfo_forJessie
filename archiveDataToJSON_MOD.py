@@ -1,12 +1,20 @@
 """
-TODO: complete documentation
+Uses a single ArcGIS Server machine to interrogate the status of services and outputs a json file of the results.
+
+Randomly accessing one of the four ags machines by machine name to bypass the web adaptor. This is done to avoid a
+Client Mismatch Erros related to token recognition failures by machines when run using geodata.md.gov (web adaptor).
+A request is made to a machine first for a token and then for information on services on the machine. The information
+is used to write an output json file that is later used by the status dashboard web page to display performance for
+the services.
+
 Name:        AGS Directory to list of started/not with stats
 Purpose:     Use for status dashboard within DoIT
 Author: JCahoon
 Revised: 20180702, JCahoon, Modifications to work with Python 3 library
 Revised: 20180821, CJuice, Redesigned to be object oriented, and addressed Client Mismatch Error issue related to
     token recognition failures by arcgis server machines. Accessing machines directly, bypassing the web adaptor,
-    and supressing Insecure Request Warnings.
+    and suppressing Insecure Request Warnings.
+Revised:
 """
 
 
@@ -35,43 +43,43 @@ def main():
     GROUPED_TYPES_LIST = ("GeometryServer", "SearchServer", "GlobeServer", "GPServer", "GeocodeServer", "GeoDataServer")
     PASSWORD = config['status_dashboard_archive']["password"]
     RESULT_FILE = "GeodataServices.json"
-    SERVER_PORT_SECURE = config['ags_prod_machine_names']["secureport"]
-    SERVER_ROOT_URL = "https://{machine_name}.mdgov.maryland.gov:{port}"
-    SERVER_URL_GENERATE_TOKEN = "arcgis/admin/generateToken"
-    SERVER_URL_ADMIN_SERVICES = "arcgis/admin/services"
-    USERNAME = config['status_dashboard_archive']["username"]
-
-    server_machine_names = {0: config['ags_prod_machine_names']["machine1"],
+    SERVER_MACHINE_NAMES = {0: config['ags_prod_machine_names']["machine1"],
                             1: config['ags_prod_machine_names']["machine2"],
                             2: config['ags_prod_machine_names']["machine3"],
                             3: config['ags_prod_machine_names']["machine4"]}
+    SERVER_PORT_SECURE = config['ags_prod_machine_names']["secureport"]
+    SERVER_ROOT_URL = "https://{machine_name}.mdgov.maryland.gov:{port}"
+    SERVER_URL_ADMIN_SERVICES = "arcgis/admin/services"
+    SERVER_URL_GENERATE_TOKEN = "arcgis/admin/generateToken"
+    USERNAME = config['status_dashboard_archive']["username"]
 
     # CLASSES
-    class ItemObject:
-        """Items are services within folders reflected in the reports."""
+    class ReportObject:
+        """Reports are summaries of services within folders."""
         GEODATA_ROOT = "https://geodata.md.gov/imap/rest/services"
         REST_URL_BEGINNING = "https://{machine_name}.mdgov.maryland.gov:{port}/arcgis/rest/services"
         REST_URL_END = "{folder}/{service_name}/{type}"
 
-        def __init__(self, item, folder, machine_name):
+        def __init__(self, report, folder, machine_name):
             """
-            Instantiate an ItemObject
-            :param item: json object with information about the service item reflected in the reports
-            :param folder: the folder in the services directory where the item is located
+            Instantiate an ReportObject
+            :param report: json object with information about the services
+            :param folder: the folder in the services directory
             :param machine_name: the name of the ags server machine currently being interrogated for information
             """
             self.folder = folder
-            self.type = item["type"]
-            self.service_name = item["serviceName"]
+            self.type = report["type"]
+            self.service_name = report["serviceName"]
             self.rest_service_url_machine = machine_name
             self.rest_service_url_geodata = None
-            self.real_time_status = item["status"]["realTimeState"]
+            self.real_time_status = report["status"]["realTimeState"]
             self.cached = "NA"
             self.feature_service = "NA"
             self.kml = "NA"
             self.wms = "NA"
             self.wfs = "NA"
             self.layers = "NA"
+            self.extensions = report["extensions"]
 
         def create_base_dictionary(self):
             """
@@ -111,8 +119,8 @@ def main():
             :param value: Not used, no initial assignment value
             :return: None
             """
-            ending = ItemObject.REST_URL_END.format(folder=self.folder, service_name=self.service_name, type=self.type)
-            self.__rest_service_url_geodata = f"{ItemObject.GEODATA_ROOT}/{ending}"
+            ending = ReportObject.REST_URL_END.format(folder=self.folder, service_name=self.service_name, type=self.type)
+            self.__rest_service_url_geodata = f"{ReportObject.GEODATA_ROOT}/{ending}"
 
         @property
         def rest_service_url_machine(self):
@@ -125,8 +133,8 @@ def main():
             :param value: Initial assignment value is the machine name only
             :return: None
             """
-            beginning = ItemObject.REST_URL_BEGINNING.format(machine_name=value, port=SERVER_PORT_SECURE)
-            ending = ItemObject.REST_URL_END.format(folder=self.folder, service_name=self.service_name, type=self.type)
+            beginning = ReportObject.REST_URL_BEGINNING.format(machine_name=value, port=SERVER_PORT_SECURE)
+            ending = ReportObject.REST_URL_END.format(folder=self.folder, service_name=self.service_name, type=self.type)
             self.__rest_service_url_machine = f"{beginning}/{ending}"
 
         def create_json_string(self, data, indent=4):
@@ -141,8 +149,8 @@ def main():
 
         def create_json_string_mapserver(self, data, indent=4):
             """
-            Add an item to a dictionary and then create and return a json string from that dictionary.
-            Intended to accept the base dictionary but to add a key: value pair fit specific to MapServer type services.
+            Add a key/value pair to a dictionary and then create and return a json string from that dictionary.
+            Intended to accept the base dictionary and then add a key/value specific to MapServer type services.
             :param data: a dictionary; designed to accept the base dictionary
             :param indent: json output pretty indent dimension (default=4)
             :return: json
@@ -266,20 +274,20 @@ def main():
         spot = random.randint(0, options)
         return spot
 
-    def extract_item_properties(item_dict, name_check, extensions="extensions", type_name="typeName"):
+    def extract_extension_properties(extensions_dict, name_check, extensions="extensions", type_name="typeName"):
         """
-        Create and return a list of extensions values for a service item based on the service type
-        :param item_dict: item dictionary to be inspected
+        Create and return a list of extensions values for a service based on the service type
+        :param extensions_dict: extensions dictionary to be inspected
         :param name_check: name to check the type against
         :param extensions: default use was 'extensions' per Jessie's design but could be other values too
         :param type_name: default use was 'typeName' per Jessie's design but could be other values too
         :return: list
         """
-        return [entity for entity in item_dict[extensions] if entity[type_name] == name_check]
+        return [entity for entity in extensions_dict[extensions] if entity[type_name] == name_check]
 
     # FUNCTIONALITY
     #   Select a machine at random to which to make a request.
-    machine = server_machine_names[create_random_int(upper_integer=len(server_machine_names))]
+    machine = SERVER_MACHINE_NAMES[create_random_int(upper_integer=len(SERVER_MACHINE_NAMES))]
     print(f"MACHINE: {machine}")
 
     #   Get a token
@@ -330,49 +338,49 @@ def main():
             report_request_params = create_params_for_request(token_action=machine_object.token)
             reports = get_value_from_response(url=report_url, params=report_request_params, search_key="reports")
 
-            # Inspect service items reflected in the reports
-            line = ""
-            item_iteration_count = 0
-            for item in reports:
+            # Inspect service reports
+            report_iteration_count = 0
+            for report in reports:
+                line = ""
                 if folder == "":
                     folder_name = "Root"
                 else:
                     folder_name = folder
 
-                item_object = ItemObject(item=item, folder=folder_name, machine_name=machine)
-                if item_object.type in GROUPED_TYPES_LIST:
-                    line = item_object.create_json_string(data=item_object.create_base_dictionary())
-                elif item_object.type == "MapServer":
+                report_object = ReportObject(report=report, folder=folder_name, machine_name=machine)
+                if report_object.type in GROUPED_TYPES_LIST:
+                    line = report_object.create_json_string(data=report_object.create_base_dictionary())
+                elif report_object.type == "MapServer":
 
                     # Check for Map Cache
-                    item_object.cached = item["properties"]["isCached"]
+                    report_object.cached = report["properties"]["isCached"]
 
-                    if len(item["extensions"]) > 0:
+                    if len(report_object.extensions) > 0:
 
                         # Extract the KML, WMS, WFS, and FeatureServer properties from the response
-                        kml_properties = extract_item_properties(item_dict=item, name_check="KmlServer")
-                        wms_properties = extract_item_properties(item_dict=item, name_check="WMSServer")
-                        wfs_properties = extract_item_properties(item_dict=item, name_check="WFSServer")
-                        feature_server_properties = extract_item_properties(item_dict=item, name_check="FeatureServer")
-
+                        # Current design makes a list containing one dictionary. It then accesses the dictionary by
+                        #   specifying the zero index of the list to get the dict and then requests the 'enabled' key.
+                        #   TODO: Improvement - redesign for use of report object and simplify
+                        kml_properties = extract_extension_properties(extensions_dict=report, name_check="KmlServer")
+                        wms_properties = extract_extension_properties(extensions_dict=report, name_check="WMSServer")
+                        wfs_properties = extract_extension_properties(extensions_dict=report, name_check="WFSServer")
+                        feature_server_properties = extract_extension_properties(extensions_dict=report,
+                                                                                 name_check="FeatureServer")
                         if len(feature_server_properties) > 0:
-                            item_object.feature_service = str(feature_server_properties[0]["enabled"])
-
+                            report_object.feature_service = str(feature_server_properties[0]["enabled"])
                         if len(kml_properties) > 0:
-                            item_object.kml = str(kml_properties[0]["enabled"])
-
+                            report_object.kml = str(kml_properties[0]["enabled"])
                         if len(wms_properties) > 0:
-                            item_object.wms = str(wms_properties[0]["enabled"])
-
+                            report_object.wms = str(wms_properties[0]["enabled"])
                         if len(wfs_properties) > 0:
-                            item_object.wfs = str(wfs_properties[0]["enabled"])
+                            report_object.wfs = str(wfs_properties[0]["enabled"])
 
                     # Handle map server layers. Functionality unique to Map Server.
                     layer_iteration_count = 0
                     layers_string = "["
-                    if item_object.real_time_status == "STARTED":
+                    if report_object.real_time_status == "STARTED":
                         layer_request_params = create_params_for_request()
-                        layers = get_value_from_response(url=item_object.rest_service_url_machine,
+                        layers = get_value_from_response(url=report_object.rest_service_url_machine,
                                                          params=layer_request_params,
                                                          search_key="layers")
                         try:
@@ -384,44 +392,40 @@ def main():
                                 layer_data_dict = {"id": str(layer["id"]), "name": layer["name"]}
                                 layers_string += json.dumps(layer_data_dict)
                                 layer_iteration_count += 1
-                        except:
-                            print('no layers')
+                        except Exception as e:
+                            print(f'No layers. {e}')
                     layers_string += "]"
-                    item_object.layers = layers_string
-                    line = item_object.create_json_string_mapserver(data=item_object.create_base_dictionary())
-                elif item["type"] == "ImageServer":
-                    wms_properties = extract_item_properties(item_dict=item, name_check="WMSServer")
+                    report_object.layers = layers_string
+                    line = report_object.create_json_string_mapserver(data=report_object.create_base_dictionary())
+                elif report["type"] == "ImageServer":
+                    wms_properties = extract_extension_properties(extensions_dict=report, name_check="WMSServer")
                     if len(wms_properties) > 0:
-                        item_object.wms = str(wms_properties[0]["enabled"])
-                    line = item_object.create_json_string(data=item_object.create_base_dictionary())
+                        report_object.wms = str(wms_properties[0]["enabled"])
+                    line = report_object.create_json_string(data=report_object.create_base_dictionary())
                 else:
                     # line would still be == "" if this else is accessed
                     pass
 
-                # Insert a comma before all lines except for the first item or for empty items where line is empty.
-                if item_iteration_count == 0 or line == "":
+                # Insert a comma before all lines except for the first service report or where the line is empty.
+                if report_iteration_count == 0 or line == "":
                     pass
                 else:
                     line = f",{line}"
 
-                # Write the results to the file, unless the item is empty
+                # Write the results to the file, unless the line is empty
                 if line == "":
                     pass
                 else:
                     service_results_file_handler.write(line)
-                    line = ""
-                    item_iteration_count += 1
+                    report_iteration_count += 1
 
-            # TODO: It is unclear how this is triggered and how it interacts with the functionality within the items loop. Run print tests.
-            if folder_iteration_count < (len(folders)) and item_iteration_count > 0:
-                line = f"{line},"
-                print("In the IF statement")        # TESTING
-                print(line)                         # TESTING
+            # Insert a comma after all of a folders services have been processed
+            #   ***Except after the last folder of the entire output.
+            if folder_iteration_count < (len(folders)) and report_iteration_count > 0:
+                comma = ","
+                service_results_file_handler.write(comma)
             else:
-                print("In the ELSE statement")      # TESTING
                 pass
-            service_results_file_handler.write(line)    # TODO: Could this be moved into the if statement?
-            line = ""
 
     service_results_file_handler.write("]")
     service_results_file_handler.close()
