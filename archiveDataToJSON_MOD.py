@@ -179,7 +179,7 @@ def main():
             Overriding the __str__ builtin to control the appearance of the machine object print-out for readability.
             :return: string
             """
-            return f"{self.machine_name}-->\n\t{self.root_url}\n\t{self.services_url}\n\t{self.token}\n\t{self.folders_list}"
+            return f"{self.machine_name}-->\n\t{self.root_url}\n\t{self.admin_services_url}\n\t{self.token}\n\t{self.folders_list}"
 
     class NotJSONException(Exception):
         """Raised when the url for the request is malformed for our purposes and the server returns html, not json"""
